@@ -40,15 +40,16 @@
     var cursors;
     var altCursors;
     var vec;
-    var bSpeed = 1000;
-    var bamnt = 60;
-    var bdelay = 5;
-    var upgrade = 0;
+    var bSpeed = 350;
+    var bamnt = 5;
+    var bdelay = 200;
+    var bSize = 1.5;
+    var upgradeChoice = 0;
     var speedLv = 1;
     var quantity = 1;
     var delayLv = 1;
     const lvMax = 8;
-    const pSpeed = 400;
+    var pSpeed = 400;
     var bullets;
     var lastFired = 0;
     var boostTime = 0;
@@ -64,6 +65,7 @@
     var score = 0;
     var powerNumPool = 1;
     var getHit;
+    var killBomb;
 
     // class Star extends
 
@@ -74,7 +76,7 @@
 
       fire(x, y, px, py) {
         this.setPosition(x * 15 + px, y * 15 + py);
-        this.setScale(2);
+        this.setScale(bSize);
         this.vec = [x, y];
         this.setActive(true);
         this.setVisible(true);
@@ -97,7 +99,7 @@
         super(scene.physics.world, scene);
 
         this.createMultiple({
-          frameQuantity: bamnt,
+          frameQuantity: 100,
           key: 'bullet',
           active: false,
           visible: false,
@@ -225,7 +227,8 @@
       bullets = new Bullets(this);
 
       getHit = this.physics.add.collider(hitbox, bombs, damagePlayer, null, this);
-      this.physics.add.collider(bullets, bombs, hitBomb, null, this);
+      killBomb = this.physics.add.collider(bullets, bombs, hitBomb, null, this);
+      killBomb.active = false;
       this.physics.add.collider(bombs, bombs);
       boostSuperArmour = this.physics.add.collider(player, bombs)
 
@@ -243,25 +246,44 @@
     function powerUp(player, star) {
       star.setActive(false);
       star.setVisible(false);
+      upgradeChoice = Math.floor(Math.random()*5)+1;
+      switch (upgradeChoice) {
+        case 1:
+          quantity += 5;
+          break;
+        case 2:
+          bSpeed += 30;
+          break;
+        case 3:
+          bdelay -= 10;
+          break;
+        case 4:
+          pSpeed += 30;
+          break;
+        case 5:
+          bSize += 0.5;
+          break;
+      }
+      upgradeChoice = 0;
     }
 
     function bombInit(bomb, position) {
       switch (position) {
         case 1:
-          bomb.x = Phaser.Math.Between(0, 800);
-          bomb.y = Phaser.Math.Between(5, 20);
+          bomb.x = Phaser.Math.Between(20, 780);
+          bomb.y = Phaser.Math.Between(20, 25);
           break;
         case 2:
-          bomb.x = Phaser.Math.Between(0, 800);
-          bomb.y = Phaser.Math.Between(580, 595);
+          bomb.x = Phaser.Math.Between(20, 780);
+          bomb.y = Phaser.Math.Between(575, 580);
           break;
         case 3:
-          bomb.x = Phaser.Math.Between(5, 20);
-          bomb.y = Phaser.Math.Between(0, 600);
+          bomb.x = Phaser.Math.Between(20, 25);
+          bomb.y = Phaser.Math.Between(20, 580);
           break;
         case 4:
-          bomb.x = Phaser.Math.Between(780, 795);
-          bomb.y = Phaser.Math.Between(0, 600);
+          bomb.x = Phaser.Math.Between(775, 780);
+          bomb.y = Phaser.Math.Between(20, 580);
       }
     bomb.setBounce(1);
     bomb.setCollideWorldBounds(true);
@@ -298,11 +320,11 @@
           c.enableBody(true, c.x, 30, true, true);
         });
         if (score < 1500) {
-          for (let i = 0; i < (Math.floor(Math.random() * 4) + 1); i++) {
+          for (let i = 0; i < (Math.floor(Math.random() * 2) + 1); i++) {
             bombs.create(800, 0, 'bomb');
           }
         } else {
-          for (let i = 0; i < (Math.floor(Math.random() * 4) + 4); i++) {
+          for (let i = 0; i < (Math.floor(Math.random() * 2) + 4); i++) {
             bombs.create(800, 0, 'bomb');
           }
         }
@@ -321,6 +343,16 @@
       timeText.setText("time: " + timeVal + "s");
       boostText.setText("boost left: " + (score - boostTime));
      
+      if (star) {
+        if (star.angle < 20) {
+      star.setAngularAcceleration(50);
+      } else if (star.angle < 50) {
+        star.setAngularAcceleration(0);
+      } else {
+        star.setAngularAcceleration(-70);
+      }
+      }
+      
       boostSuperArmour.active = false;
       if (cursors.shift.isDown && boostTime < score) {
         boostSuperArmour.active = true;
@@ -366,6 +398,7 @@
       hitbox.y = player.y; + vec.y;
 
       if (cursors.space.isDown && time > lastFired) {
+        killBomb.active = true;
         lastFired = time + bullets.fireBullet(vec.x, vec.y, player.x, player.y);
       }
       this.physics.world.wrap(player, 16);

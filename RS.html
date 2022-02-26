@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <title>raiden survivor</title>
+  <style>
+    * {
+      margin: 0;
+    }
+  </style>
+  <script src="//cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.js"></script>
+</head>
+
+<body>
+  <script>
+    const config = {
+      type: Phaser.AUTO,
+      width: 800,
+      height: 600,
+      physics: {
+        default: 'arcade',
+        arcade: {
+          fps: 60,
+          gravity: {
+            y: 0
+          }
+        }
+      },
+      scene: {
+        preload: preload,
+        create: create,
+        update: update
+      }
+    };
+
+    let game = new Phaser.Game(config);
+    var player;
+    var gameOver = false;
+    var cursors;
+    var altCursors;
+    var vec;
+    var bSpeed = 1000;
+    var bamnt = 60;
+    var bdelay = 5;
+    var upgrade = 0;
+    var speedLv = 1;
+    var quantity = 1;
+    var delayLv = 1;
+    const lvMax = 8;
+    const pSpeed = 400;
+    var bullets;
+    var lastFired = 0;
+    var boostTime = 0;
+    var boostSuperArmour;
+    var bombs;
+    var stars;
+    var star;
+    var hitbox;
+    var scoreText;
+    var timeText;
+    var boostText;
+    var timeVal = 0;
+    var score = 0;
+    var powerNumPool = 1;
+    var getHit;
+
+    // class Star extends
+
+    class Bullet extends Phaser.Physics.Arcade.Image {
+      constructor(scene, x, y) {
+        super(scene, x, y, 'bullet');
+      }
+
+      fire(x, y, px, py) {
+        this.setPosition(x * 15 + px, y * 15 + py);
+        this.setScale(2);
+        this.vec = [x, y];
+        this.setActive(true);
+        this.setVisible(true);
+
+        this.setVelocity(bSpeed * this.vec[0], bSpeed * this.vec[1]);
+
+      }
+
+      preUpdate(time, delta) {
+        if (-50 > this.y || this.y > 650 || this.x < -50 || this.x > 850) {
+          this.setActive(false);
+          this.setVisible(false);
+        }
+      }
+    }
+
+    class Bullets extends Phaser.Physics.Arcade.Group {
+
+      constructor(scene) {
+        super(scene.physics.world, scene);
+
+        this.createMultiple({
+          frameQuantity: bamnt,
+          key: 'bullet',
+          active: false,
+          visible: false,
+          classType: Bullet,
+          runChildUpdate: true
+        });
+      }
+
+      fireBullet(x, y, px, py) {
+        let bullet = this.getFirstDead(false);
+
+        if (bullet) {
+          bullet.fire(x, y, px, py);
+          return bdelay;
+        }
+        return 0;
+      }
+    }
+
+    function preload() {
+      this.load.spritesheet('ship', 'assets/ship.png', {
+        frameWidth: 19,
+        frameHeight: 20
+      });
+      this.load.image('bullet', 'assets/bullet.png');
+      this.load.image('bomb', 'assets/bomb.png');
+      this.load.image('star', 'assets/star.png');
+    }
+
+    function create() {
+      const width = this.scale.width;
+      const height = this.scale.height;
+
+      scoreText = this.add.text(16, 16, 'score: 0', {
+        fontSize: '12px',
+        fill: '#fff'
+      });
+      timeText = this.add.text(width - 76, 16, 'time: 0s', {
+        fontSize: '12px',
+        fill: '#fff'
+      });
+      boostText = this.add.text(16, height - 26, 'boost left: 0', {
+        fontSize: '12px',
+        fill: '#fff'
+      });
+
+      this.gameTimer = this.time.addEvent({
+        delay: 1000,
+        callback: function () {
+          timeVal++;
+        },
+        callbackScope: this,
+        loop: true
+      })
+
+      player = this.physics.add.sprite(width / 2, height / 2, 'ship').setScale(1.2);
+      player.setDamping(true);
+      player.setDrag(0.3);
+      player.setMaxVelocity(250);
+
+      hitbox = this.physics.add.image(width / 2, height / 2, 'bullet').setScale(2.6);
+      hitbox.setVisible(false);
+
+      this.anims.create({
+        key: 'idle',
+        frames: this.anims.generateFrameNumbers('ship', {
+          end: 1
+        }),
+        frameRate: 15,
+        repeat: -1
+      });
+
+      this.anims.create({
+        key: 'turnLeft',
+        frames: this.anims.generateFrameNumbers('ship', {
+          start: 4,
+          end: 6
+        }),
+        frameRate: 30,
+        repeat: -1
+      });
+
+      this.anims.create({
+        key: 'turnRight',
+        frames: this.anims.generateFrameNumbers('ship', {
+          start: 7,
+          end: 9
+        }),
+        frameRate: 30,
+        repeat: -1
+      });
+
+      this.anims.create({
+        key: 'up',
+        frames: this.anims.generateFrameNumbers('ship', {
+          start: 2,
+          end: 3
+        }),
+        frameRate: 30,
+        repeat: -1
+      });
+
+      this.anims.create({
+        key: 'boost',
+        frames: this.anims.generateFrameNumbers('ship', {
+          end: 9
+        }),
+        frameRate: 50,
+        repeat: -1
+      });
+
+      bombs = this.physics.add.group({
+        key: 'bomb',
+        repeat: 2
+      });
+
+      stars = this.physics.add.group();
+      this.physics.add.overlap(stars, player, powerUp, null, this);
+
+      bombs.children.iterate(function (bomb) {
+        let position = Phaser.Math.Between(0, 5);
+        bombInit(bomb, position);
+      });
+
+      bullets = new Bullets(this);
+
+      getHit = this.physics.add.collider(hitbox, bombs, damagePlayer, null, this);
+      this.physics.add.collider(bullets, bombs, hitBomb, null, this);
+      this.physics.add.collider(bombs, bombs);
+      boostSuperArmour = this.physics.add.collider(player, bombs)
+
+
+      cursors = this.input.keyboard.createCursorKeys();
+      altCursors = this.input.keyboard.addKeys({
+        'up': Phaser.Input.Keyboard.KeyCodes.W,
+        'down': Phaser.Input.Keyboard.KeyCodes.S,
+        'left': Phaser.Input.Keyboard.KeyCodes.A,
+        'right': Phaser.Input.Keyboard.KeyCodes.D
+      });
+
+    }
+
+    function powerUp(player, star) {
+      star.setActive(false);
+      star.setVisible(false);
+    }
+
+    function bombInit(bomb, position) {
+      switch (position) {
+        case 1:
+          bomb.x = Phaser.Math.Between(0, 800);
+          bomb.y = Phaser.Math.Between(5, 20);
+          break;
+        case 2:
+          bomb.x = Phaser.Math.Between(0, 800);
+          bomb.y = Phaser.Math.Between(580, 595);
+          break;
+        case 3:
+          bomb.x = Phaser.Math.Between(5, 20);
+          bomb.y = Phaser.Math.Between(0, 600);
+          break;
+        case 4:
+          bomb.x = Phaser.Math.Between(780, 795);
+          bomb.y = Phaser.Math.Between(0, 600);
+      }
+    bomb.setBounce(1);
+    bomb.setCollideWorldBounds(true);
+    if (50 < bomb.y < 550) {
+      bomb.setVelocity(Phaser.Math.Between(200, 270), Phaser.Math.Between(-200, 200));
+    } else {
+      bomb.setVelocity(Phaser.Math.Between(-200, 200), Phaser.Math.Between(200, 270));
+    }
+    bomb.setMaxVelocity(400);
+    }
+
+    function damagePlayer(hitbox, bombs) {
+      this.physics.pause();
+      gameOver = true;
+    }
+
+    function hitBomb(bullet, bomb) {
+      bullet.setActive(false);
+      bullet.setVisible(false);
+      bomb.disableBody(true, true);
+
+      score += 10;
+      scoreText.setText("Score: " + score);
+
+      if (Math.floor(Math.random() * 10 * powerNumPool) < 2) {
+        powerNumPool++;
+        let x = bomb.x;
+        let y = bomb.y;
+        star = stars.create(x, y, 'star');
+      }
+
+      if (bombs.countActive(true) === 0) {
+        bombs.children.iterate(function (c) {
+          c.enableBody(true, c.x, 30, true, true);
+        });
+        if (score < 1500) {
+          for (let i = 0; i < (Math.floor(Math.random() * 4) + 1); i++) {
+            bombs.create(800, 0, 'bomb');
+          }
+        } else {
+          for (let i = 0; i < (Math.floor(Math.random() * 4) + 4); i++) {
+            bombs.create(800, 0, 'bomb');
+          }
+        }
+        bombs.children.iterate(function (bomb) {
+          let position = Math.floor(Math.random() * 4 + 1);
+          bombInit(bomb, position);
+        });
+      }
+    }
+
+    function update(time, delta) {
+      if (gameOver) {
+        player.setTint(0xff0000);
+        return;
+      }
+      timeText.setText("time: " + timeVal + "s");
+      boostText.setText("boost left: " + (score - boostTime));
+     
+      boostSuperArmour.active = false;
+      if (cursors.shift.isDown && boostTime < score) {
+        boostSuperArmour.active = true;
+        getHit.active = false;
+        boostTime += 5;
+        if (boostTime > score) {
+          boostTime = score;
+        }
+        this.physics.velocityFromRotation(player.rotation - (Math.PI / 2), pSpeed * 10, player.body.acceleration);
+      } else if (cursors.up.isDown || altCursors.up.isDown) {
+        this.physics.velocityFromRotation(player.rotation - (Math.PI / 2), pSpeed, player.body.acceleration);
+      } else {
+        player.setAcceleration(0);
+      }
+      if (cursors.shift.isDown && boostTime < score) {
+        player.setTint((0xffff00));
+        player.anims.play('boost', true);
+      } else if (cursors.left.isDown || altCursors.left.isDown) {
+        player.setTint((0xffffff));
+        player.anims.play('turnLeft', true);
+      } else if (cursors.right.isDown || altCursors.right.isDown) {
+        player.setTint((0xffffff));
+        player.anims.play('turnRight', true);
+      } else if (cursors.up.isDown || altCursors.up.isDown) {
+        player.setTint((0xffffff));
+        player.anims.play('up', true);
+      } else {
+        player.setTint((0xffffff));
+        player.anims.play('idle', true);
+      }
+
+      if (cursors.left.isDown || altCursors.left.isDown) {
+        player.setAngularVelocity(-300);
+      } else if (cursors.right.isDown || altCursors.right.isDown) {
+        player.setAngularVelocity(300);
+      } else {
+        player.setAngularVelocity(0);
+      }
+
+      vec = this.physics.velocityFromRotation(player.rotation - (Math.PI / 2), 1);
+
+      hitbox.x = player.x + vec.x;
+      hitbox.y = player.y; + vec.y;
+
+      if (cursors.space.isDown && time > lastFired) {
+        lastFired = time + bullets.fireBullet(vec.x, vec.y, player.x, player.y);
+      }
+      this.physics.world.wrap(player, 16);
+    }
+  </script>
+</body>
+
+</html>

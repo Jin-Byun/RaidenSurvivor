@@ -34,40 +34,63 @@
       }
     };
 
+    //game Essentials
     let game = new Phaser.Game(config);
-    var player;
-    var gameOver = false;
     var cursors;
     var altCursors;
     var vec;
-    var bSpeed = 350;
-    var bamnt = 5;
-    var bdelay = 200;
-    var bSize = 1.5;
-    var upgradeChoice = 0;
-    var speedLv = 1;
-    var quantity = 1;
-    var delayLv = 1;
-    const lvMax = 8;
-    var pSpeed = 400;
-    var bullets;
-    var lastFired = 0;
-    var boostTime = 0;
-    var boostSuperArmour;
+
+    //constants
+    const maxBullet = 100;
+    const maxLv = 8;
+    
+    //entities
+    var player;
     var bombs;
+    var superBombs;
     var stars;
     var star;
     var hitbox;
+    var bullets;
+
+    //text and displayed info
     var scoreText;
     var timeText;
     var boostText;
+    var upgradeText;
+    var battleText;
+    var bulletLevel = 1;
+    var shipLevel = 1;
+    var boostTime = 0;
+    var boostEfficiency = 8;
+    var waveCount = 1;
     var timeVal = 0;
     var score = 0;
+
+    //upgradeable
+    var pSpeed = 250;
+    var bSpeed = 300;
+    var bamnt = 8;
+    var bdelay = 110;
+    var bSize = 1.5;
+    var pDrag = 0.7;
+
+    //conditions and comparables
+    var gameOver = false;
+    var nextUp = 1;
+    var upgradeChoice = 0;
+    var lastUpBullet = 0;
+    var lastUpShip = 0;
+    var lastFired = 0;
     var powerNumPool = 1;
+    var star2Remove = 0;
+    var removestar = false;
+
+    //colliders
+    var boostSuperArmour;
     var getHit;
     var killBomb;
-
-    // class Star extends
+    var killSuperBomb;
 
     class Bullet extends Phaser.Physics.Arcade.Image {
       constructor(scene, x, y) {
@@ -99,7 +122,7 @@
         super(scene.physics.world, scene);
 
         this.createMultiple({
-          frameQuantity: 100,
+          frameQuantity: maxBullet,
           key: 'bullet',
           active: false,
           visible: false,
@@ -133,15 +156,23 @@
       const width = this.scale.width;
       const height = this.scale.height;
 
-      scoreText = this.add.text(16, 16, 'score: 0', {
+      scoreText = this.add.text(16, 38, 'score: 0', {
         fontSize: '12px',
         fill: '#fff'
       });
-      timeText = this.add.text(width - 76, 16, 'time: 0s', {
+      timeText = this.add.text(16, 24, 'time: 0s', {
         fontSize: '12px',
         fill: '#fff'
       });
-      boostText = this.add.text(16, height - 26, 'boost left: 0', {
+      battleText = this.add.text(16, 8, 'Wave 1', {
+        fontSize: '16px',
+        fill: '#fff'
+      });
+      boostText = this.add.text(16, 66, 'boost left: 0', {
+        fontSize: '12px',
+        fill: '#fff'
+      });
+      upgradeText = this.add.text(16, 52, 'Bullet: 1 Ship: 1', {
         fontSize: '12px',
         fill: '#fff'
       });
@@ -157,11 +188,10 @@
 
       player = this.physics.add.sprite(width / 2, height / 2, 'ship').setScale(1.2);
       player.setDamping(true);
-      player.setDrag(0.3);
-      player.setMaxVelocity(250);
 
-      hitbox = this.physics.add.image(width / 2, height / 2, 'bullet').setScale(2.6);
+      hitbox = this.physics.add.image(width / 2, height / 2, 'bullet').setScale(2);
       hitbox.setVisible(false);
+      hitbox.life = 2;
 
       this.anims.create({
         key: 'idle',
@@ -216,20 +246,28 @@
         repeat: 2
       });
 
+      
+      superBombs = this.physics.add.group();
+      
+
       stars = this.physics.add.group();
-      this.physics.add.overlap(stars, player, powerUp, null, this);
+      this.physics.add.overlap(stars, player, eatStar, null, this);
 
       bombs.children.iterate(function (bomb) {
-        let position = Phaser.Math.Between(0, 5);
+        let position = Math.floor(Math.random()*4+1);
         bombInit(bomb, position);
       });
 
       bullets = new Bullets(this);
 
       getHit = this.physics.add.collider(hitbox, bombs, damagePlayer, null, this);
-      killBomb = this.physics.add.collider(bullets, bombs, hitBomb, null, this);
+      killBomb = this.physics.add.overlap(bullets, bombs, hitBomb, null, this);
       killBomb.active = false;
       this.physics.add.collider(bombs, bombs);
+      this.physics.add.collider(hitbox, superBombs, damagePlayer, null, this);
+      killSuperBomb = this.physics.add.collider(bullets, superBombs, hitSuperBomb, null, this);
+      killSuperBomb.active = false;
+      this.physics.add.collider(superBombs, superBombs);
       boostSuperArmour = this.physics.add.collider(player, bombs)
 
 
@@ -243,28 +281,69 @@
 
     }
 
-    function powerUp(player, star) {
-      star.setActive(false);
-      star.setVisible(false);
-      upgradeChoice = Math.floor(Math.random()*5)+1;
+    function levelUp() {
+      upgradeChoice = Math.floor(Math.random()*2)+1;
       switch (upgradeChoice) {
         case 1:
-          quantity += 5;
+          if(lastUpBullet > 0){
+            lastUpBullet = 0;
+            levelUp();
+          } else {
+          bamnt += bulletLevel;
+          bdelay -= 3*bulletLevel;
+          bSpeed += 50;
+          bSize += 0.2 + (bulletLevel/10);
+          bulletLevel++;
+          lastUpBullet++;
+          }
           break;
         case 2:
-          bSpeed += 30;
-          break;
-        case 3:
-          bdelay -= 10;
-          break;
-        case 4:
-          pSpeed += 30;
-          break;
-        case 5:
-          bSize += 0.5;
-          break;
+          if(lastUpShip > 0){
+            lastUpShip = 0;
+            levelUp();
+          } else {
+          pDrag -= 0.08;
+          pSpeed += 10*shipLevel;
+          boostEfficiency--;
+          shipLevel++;
+          lastUpShip++;
+          }
       }
       upgradeChoice = 0;
+      }
+
+    function eatStar(player, star) {
+        levelUp();
+      stars.remove(star, true, true);
+    }
+
+    function superBombInit(bomb, position) {
+      switch (position) {
+        case 1:
+          bomb.x = Phaser.Math.Between(20, 780);
+          bomb.y = Phaser.Math.Between(20, 25);
+          break;
+        case 2:
+          bomb.x = Phaser.Math.Between(20, 780);
+          bomb.y = Phaser.Math.Between(575, 580);
+          break;
+        case 3:
+          bomb.x = Phaser.Math.Between(20, 25);
+          bomb.y = Phaser.Math.Between(20, 580);
+          break;
+        case 4:
+          bomb.x = Phaser.Math.Between(775, 780);
+          bomb.y = Phaser.Math.Between(20, 580);
+      }
+    bomb.setBounce(1);
+    bomb.setCollideWorldBounds(true);
+    if (50 < bomb.y < 550) {
+      bomb.setVelocity(Phaser.Math.Between(200, 270), Phaser.Math.Between(-200, 200));
+    } else {
+      bomb.setVelocity(Phaser.Math.Between(-200, 200), Phaser.Math.Between(200, 270));
+    }
+    bomb.setScale(2+0.5* Math.floor(nextUp/10 + 1));
+    bomb.life = nextUp;
     }
 
     function bombInit(bomb, position) {
@@ -293,12 +372,73 @@
       bomb.setVelocity(Phaser.Math.Between(-200, 200), Phaser.Math.Between(200, 270));
     }
     bomb.setMaxVelocity(400);
+    bomb.life = 1;
     }
 
-    function damagePlayer(hitbox, bombs) {
+    function damagePlayer(hitbox, bomb) {
+      hitbox.life--;
+      bomb.disableBody(true, true);
+      hitbox.setVisible(true);
+      if (!hitbox.life){
       this.physics.pause();
       gameOver = true;
+      }
     }
+
+    function spawnStar(bomb) {
+      if (waveCount == nextUp) {
+        if (Math.floor(Math.random() * powerNumPool) < 2) {
+        powerNumPool++;
+        let x = bomb.x;
+        let y = bomb.y;
+        star = stars.create(x, y, 'star');
+        star.setVelocityY(15);
+        star.setAngularVelocity(10);
+      }
+      }
+      if (Math.floor(Math.random() * 10 * powerNumPool) < 2) {
+        powerNumPool++;
+        let x = bomb.x;
+        let y = bomb.y;
+        star = stars.create(x, y, 'star');
+        star.setVelocityY(15);
+        star.setAngularVelocity(10);
+      }
+    }
+
+    function hitSuperBomb(bullet, bomb) {
+      bullet.setActive(false);
+      bullet.setVisible(false);
+      bomb.life--;
+      if (bomb.life < 1){
+      bomb.disableBody(true, true);
+      score += 100*(Math.floor(nextUp/10)+1);
+      scoreText.setText("Score: " + score);
+      spawnStar(bomb);
+      }
+      if (superBombs.countActive(true) === 0) {
+          // getPowerUp();
+          nextUp == 1 ? nextUp += 3 : nextUp += (nextUp-1);
+        waveCount++;
+        
+        bombs.children.iterate(function (c) {
+          c.enableBody(true, c.x, 30, true, true);
+        });
+        if (score < 1500) {
+          for (let i = 0; i < (Math.floor(Math.random() * 2) + 1); i++) {
+            bombs.create(800, 0, 'bomb');
+          }
+        } else {
+          for (let i = 0; i < (Math.floor(Math.random() * 2) + 2); i++) {
+            bombs.create(800, 0, 'bomb');
+          }
+        }
+        bombs.children.iterate(function (bomb) {
+          let position = Math.floor(Math.random() * 4 + 1);
+          bombInit(bomb, position);
+        });
+      }
+    } 
 
     function hitBomb(bullet, bomb) {
       bullet.setActive(false);
@@ -308,14 +448,26 @@
       score += 10;
       scoreText.setText("Score: " + score);
 
-      if (Math.floor(Math.random() * 10 * powerNumPool) < 2) {
-        powerNumPool++;
-        let x = bomb.x;
-        let y = bomb.y;
-        star = stars.create(x, y, 'star');
-      }
+      spawnStar(bomb);
 
       if (bombs.countActive(true) === 0) {
+        if(nextUp == 1) {
+          nextUp += 3;
+          // getPowerUp();
+        }
+        waveCount++;
+        if (waveCount == nextUp) {
+          if(superBombs.children.entries.length >= 1){
+            superBombs.children.iterate(function(b) {
+              b.enableBody(true, b.x, 30, true, true);
+            });
+          }
+          superBombs.create(800, 0, 'bomb');
+          superBombs.children.iterate(function(b) {
+            let position = Math.floor(Math.random() * 4 + 1);
+            superBombInit(b, position);
+          });
+        } else {
         bombs.children.iterate(function (c) {
           c.enableBody(true, c.x, 30, true, true);
         });
@@ -324,7 +476,7 @@
             bombs.create(800, 0, 'bomb');
           }
         } else {
-          for (let i = 0; i < (Math.floor(Math.random() * 2) + 4); i++) {
+          for (let i = 0; i < (Math.floor(Math.random() * 2) + 2); i++) {
             bombs.create(800, 0, 'bomb');
           }
         }
@@ -334,30 +486,41 @@
         });
       }
     }
+    }
 
     function update(time, delta) {
+      //Game over
       if (gameOver) {
         player.setTint(0xff0000);
         return;
       }
+
+      //update texts
+      battleText.setText("Wave " + waveCount);
       timeText.setText("time: " + timeVal + "s");
       boostText.setText("boost left: " + (score - boostTime));
+      upgradeText.setText("Bullet: Level "+ bulletLevel + " Ship: Level " + shipLevel);
      
-      if (star) {
-        if (star.angle < 20) {
-      star.setAngularAcceleration(50);
-      } else if (star.angle < 50) {
-        star.setAngularAcceleration(0);
-      } else {
-        star.setAngularAcceleration(-70);
+      //Star removal if below screen
+      for(let i = 0; i < stars.children.entries.length; i++) {
+        if(stars.children.entries[i].y > 600) {
+          star2Remove = i;
+          removestar = true;
+        }
       }
+      if(removestar){
+        stars.children.entries.splice(star2Remove,1);
+        removestar = false;
       }
       
+      
+      player.setMaxVelocity(pSpeed);
+      player.setDrag(pDrag);
       boostSuperArmour.active = false;
       if (cursors.shift.isDown && boostTime < score) {
         boostSuperArmour.active = true;
         getHit.active = false;
-        boostTime += 5;
+        boostTime += boostEfficiency;
         if (boostTime > score) {
           boostTime = score;
         }
@@ -397,8 +560,13 @@
       hitbox.x = player.x + vec.x;
       hitbox.y = player.y; + vec.y;
 
-      if (cursors.space.isDown && time > lastFired) {
+      if (cursors.space.isDown && time > lastFired && bullets.countActive(true) < bamnt) {
+        if(bombs.countActive(true)){
         killBomb.active = true;
+        }
+        if(superBombs.countActive(true)){
+        killSuperBomb.active = true;
+        }
         lastFired = time + bullets.fireBullet(vec.x, vec.y, player.x, player.y);
       }
       this.physics.world.wrap(player, 16);
